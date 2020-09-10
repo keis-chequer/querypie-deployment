@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: querypie-api-deployment
+  namespace: querypie
+  labels:
+    app: querypie-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: querypie-api
+  template:
+    metadata:
+      labels:
+        app: querypie-api
+    spec:
+      containers:
+        - name: querypie-api
+          image: dockerpie.querypie.com/chequer.io/querypie-api:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+            - containerPort: 8080
+            - containerPort: 33583
+          env:
+            - name: foo
+              value: bar
+      imagePullSecrets:
+        - name: regcred
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: querypie-app-deployment
+  namespace: querypie
+  labels:
+    app: querypie-app
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: querypie-app
+  template:
+    metadata:
+      labels:
+        app: querypie-app
+    spec:
+      readinessGates:
+        - conditionType: target-health.alb.ingress.k8s.aws/load-balancer-any-tg-ready
+      containers:
+        - name: querypie-app
+          image: dockerpie.querypie.com/chequer.io/querypie-app:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          livenessProbe:
+            httpGet:
+              port: 3000
+              path: /health
+          readinessProbe:
+            httpGet:
+              port: 3000
+              path: /health
+            timeoutSeconds: 5
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            successThreshold: 1
+          lifecycle:
+            preStop:
+              exec:
+                command: [ "sleep", "15" ]
+          env:
+            - name: foo
+              value: bar
+      imagePullSecrets:
+        - name: regcred
+---
